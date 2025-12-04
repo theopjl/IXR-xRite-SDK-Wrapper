@@ -1,17 +1,12 @@
 """
 ColorChecker Template Generator with ArUco Markers
 
-This script generates an A3 PDF template with ArUco markers positioned at the corners
+This module generates an A3 PDF template with ArUco markers positioned at the corners
 to facilitate automatic detection of ColorChecker charts (Classic 24-patch or Digital SG).
-
-Usage:
-    python generate_colorchecker_template.py --type classic --output template_classic.pdf
-    python generate_colorchecker_template.py --type digitalsg --output template_digitalsg.pdf
 """
 
 import cv2
 import numpy as np
-import argparse
 from reportlab.lib.pagesizes import A3
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
@@ -191,6 +186,8 @@ def create_pdf_template(colorchecker_type, output_path):
 
 
 def main():
+    import argparse
+    
     parser = argparse.ArgumentParser(
         description='Generate ColorChecker detection template with ArUco markers')
     parser.add_argument('--type', '-t', 

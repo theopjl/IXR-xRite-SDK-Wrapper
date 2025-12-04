@@ -3,7 +3,13 @@ Simple example of using the i1Pro Python wrapper
 Mirrors the functionality of eyeone.cpp example
 """
 
-from i1pro_wrapper import I1Pro, MeasurementMode, Observer, I1ProException
+import sys
+import os
+
+# Add src directory to path for importing xRite package
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+
+from xRite import I1Pro, MeasurementMode, Observer, I1ProException
 import numpy as np
 
 

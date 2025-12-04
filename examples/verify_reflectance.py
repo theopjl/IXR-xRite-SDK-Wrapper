@@ -3,7 +3,13 @@ Simple script to verify reflectance measurements
 Shows that white tile at ~90% is correct and expected
 """
 
-from i1pro_wrapper import I1Pro, MeasurementMode, Observer, Illumination
+import sys
+import os
+
+# Add src directory to path for importing xRite package
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+
+from xRite import I1Pro, MeasurementMode, Observer, Illumination
 import numpy as np
 
 
@@ -181,7 +187,7 @@ def verify_reflectance():
     print("\n" + "=" * 60)
     print("Test Complete")
     print("=" * 60)
-    print("\nFor more information, see UNDERSTANDING_REFLECTANCE.md")
+    print("\nFor more information, see docs/UNDERSTANDING_REFLECTANCE.md")
     return True
 
 

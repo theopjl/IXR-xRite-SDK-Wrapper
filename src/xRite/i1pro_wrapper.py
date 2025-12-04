@@ -143,6 +143,56 @@ _OBSERVER_STRINGS = {
 }
 
 
+def get_default_dll_path() -> str:
+    """
+    Get the default path to the i1Pro DLL.
+    
+    Searches in the following order:
+    1. dlls/ directory relative to the package root
+    2. Same directory as this module
+    3. Current working directory
+    
+    Returns:
+        Path to the DLL file
+    """
+    # Get the directory containing this module
+    module_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # Get the package root (two levels up: src/xRite -> xRite project root)
+    package_root = os.path.dirname(os.path.dirname(module_dir))
+    
+    # Check in dlls/ directory relative to package root
+    dll_path = os.path.join(package_root, "dlls", "i1Pro64.dll")
+    if os.path.exists(dll_path):
+        return dll_path
+    
+    # Check for 32-bit DLL
+    dll_path = os.path.join(package_root, "dlls", "i1Pro.dll")
+    if os.path.exists(dll_path):
+        return dll_path
+    
+    # Check same directory as module
+    dll_path = os.path.join(module_dir, "i1Pro64.dll")
+    if os.path.exists(dll_path):
+        return dll_path
+    
+    dll_path = os.path.join(module_dir, "i1Pro.dll")
+    if os.path.exists(dll_path):
+        return dll_path
+    
+    # Check current working directory
+    dll_path = os.path.join(os.getcwd(), "i1Pro64.dll")
+    if os.path.exists(dll_path):
+        return dll_path
+    
+    dll_path = os.path.join(os.getcwd(), "i1Pro.dll")
+    if os.path.exists(dll_path):
+        return dll_path
+    
+    # Return default path (will fail if not found)
+    return os.path.join(package_root, "dlls", "i1Pro64.dll")
+
+
 class I1ProException(Exception):
     """Exception for i1Pro SDK errors"""
     def __init__(self, result_code: I1ResultType, message: str = ""):
@@ -160,14 +210,10 @@ class I1ProSDK:
         
         Args:
             dll_path: Path to i1Pro64.dll (or i1Pro.dll for 32-bit)
-                     If None, searches in current directory
+                     If None, searches in default locations
         """
         if dll_path is None:
-            # Try to find DLL in same directory as this script
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            dll_path = os.path.join(current_dir, "i1Pro64.dll")
-            if not os.path.exists(dll_path):
-                dll_path = os.path.join(current_dir, "i1Pro.dll")
+            dll_path = get_default_dll_path()
         
         if not os.path.exists(dll_path):
             raise FileNotFoundError(f"i1Pro DLL not found at: {dll_path}")

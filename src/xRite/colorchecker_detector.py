@@ -1,19 +1,13 @@
 """
 ColorChecker Detection and Color Extraction
 
-This script detects a ColorChecker chart in an image using ArUco markers,
+This module detects a ColorChecker chart in an image using ArUco markers,
 extracts the color values from each patch, and optionally performs light compensation.
-
-Usage:
-    python detect_colorchecker.py --input image.jpg --output results
-    python detect_colorchecker.py --input image.tif --output results --camera-params camera_intrinsics.json
-    python detect_colorchecker.py --input image.png --output results --light-compensation
 """
 
 import cv2
 import numpy as np
 import json
-import argparse
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 
@@ -426,6 +420,8 @@ def load_camera_params(params_path: str) -> Dict:
 
 
 def main():
+    import argparse
+    
     parser = argparse.ArgumentParser(
         description='Detect ColorChecker and extract patch colors using ArUco markers')
     parser.add_argument('--input', '-i', required=True,

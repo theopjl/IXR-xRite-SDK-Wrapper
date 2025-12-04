@@ -3,7 +3,13 @@ Simple example for ambient light measurement with i1Pro 3
 Useful for measuring room lighting, photography lighting, etc.
 """
 
-from i1pro_wrapper import I1Pro, MeasurementMode, Observer, Illumination, I1ProException
+import sys
+import os
+
+# Add src directory to path for importing xRite package
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+
+from xRite import I1Pro, MeasurementMode, Observer, Illumination, I1ProException
 import numpy as np
 
 
