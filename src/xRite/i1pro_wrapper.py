@@ -148,30 +148,55 @@ def get_default_dll_path() -> str:
     Get the default path to the i1Pro DLL.
     
     Searches in the following order:
-    1. dlls/ directory relative to the package root
-    2. Same directory as this module
-    3. Current working directory
+    1. i1Profiler installation directory (preferred for working 32-bit DLL)
+    2. dlls/ directory relative to the package root
+    3. Same directory as this module
+    4. Current working directory
     
     Returns:
         Path to the DLL file
     """
+    import struct
+    is_32bit = struct.calcsize("P") * 8 == 32
+    
     # Get the directory containing this module
     module_dir = os.path.dirname(os.path.abspath(__file__))
     
     # Get the package root (two levels up: src/xRite -> xRite project root)
     package_root = os.path.dirname(os.path.dirname(module_dir))
     
+    # For 32-bit Python, prefer the i1Profiler installation (known working DLL)
+    if is_32bit:
+        # Check i1Profiler installation paths
+        i1profiler_paths = [
+            r"C:\Program Files (x86)\X-Rite\Devices\i1pro\i1Pro.dll",
+            r"C:\Program Files\X-Rite\Devices\i1pro\i1Pro.dll",
+        ]
+        for dll_path in i1profiler_paths:
+            if os.path.exists(dll_path):
+                return dll_path
+    
     # Check in dlls/ directory relative to package root
+    if is_32bit:
+        dll_path = os.path.join(package_root, "dlls", "i1Pro.dll")
+        if os.path.exists(dll_path):
+            return dll_path
+    
     dll_path = os.path.join(package_root, "dlls", "i1Pro64.dll")
     if os.path.exists(dll_path):
         return dll_path
     
-    # Check for 32-bit DLL
+    # Check for 32-bit DLL in dlls folder
     dll_path = os.path.join(package_root, "dlls", "i1Pro.dll")
     if os.path.exists(dll_path):
         return dll_path
     
     # Check same directory as module
+    if is_32bit:
+        dll_path = os.path.join(module_dir, "i1Pro.dll")
+        if os.path.exists(dll_path):
+            return dll_path
+    
     dll_path = os.path.join(module_dir, "i1Pro64.dll")
     if os.path.exists(dll_path):
         return dll_path
@@ -181,6 +206,11 @@ def get_default_dll_path() -> str:
         return dll_path
     
     # Check current working directory
+    if is_32bit:
+        dll_path = os.path.join(os.getcwd(), "i1Pro.dll")
+        if os.path.exists(dll_path):
+            return dll_path
+    
     dll_path = os.path.join(os.getcwd(), "i1Pro64.dll")
     if os.path.exists(dll_path):
         return dll_path
@@ -189,7 +219,9 @@ def get_default_dll_path() -> str:
     if os.path.exists(dll_path):
         return dll_path
     
-    # Return default path (will fail if not found)
+    # Return default path based on architecture (will fail if not found)
+    if is_32bit:
+        return r"C:\Program Files (x86)\X-Rite\Devices\i1pro\i1Pro.dll"
     return os.path.join(package_root, "dlls", "i1Pro64.dll")
 
 
@@ -225,9 +257,12 @@ class I1ProSDK:
         """Setup function signatures for all SDK functions"""
         
         # I1_GetDevices
+        # Signature: I1_GetDevices(I1_DeviceHandle **devices, I1_UInteger *count)
+        # I1_DeviceHandle is a pointer (struct I1_Device_ *), so we need pointer-to-pointer
+        # The SDK fills *devices with a pointer to its internal static array of handles
         self.dll.I1_GetDevices.argtypes = [
-            POINTER(POINTER(I1_DeviceHandle)),
-            POINTER(I1_UInteger)
+            POINTER(POINTER(c_void_p)),  # I1_DeviceHandle** - pointer to pointer
+            POINTER(I1_UInteger)          # I1_UInteger* - pointer to count
         ]
         self.dll.I1_GetDevices.restype = I1_ResultType
         
@@ -357,14 +392,25 @@ class I1Pro:
         Returns:
             Number of connected devices
         """
-        devices_ptr = POINTER(I1_DeviceHandle)()
+        # I1_GetDevices signature: I1_GetDevices(I1_DeviceHandle **devices, I1_UInteger *count)
+        # I1_DeviceHandle is already a pointer (struct I1_Device_ *)
+        # So I1_DeviceHandle** is a pointer to a pointer
+        # The SDK writes to *devices the address of its internal static array of handles
+        
+        # Create a pointer variable that will receive the array address
+        # This is equivalent to: I1_DeviceHandle *devices_array = NULL;
+        # Then passing &devices_array to the function
+        devices_array = POINTER(c_void_p)()  # NULL pointer to c_void_p (device handle)
         count = I1_UInteger(0)
-        result = self.sdk.dll.I1_GetDevices(byref(devices_ptr), byref(count))
+        
+        # Pass address of our pointer variable so SDK can fill it
+        result = self.sdk.dll.I1_GetDevices(byref(devices_array), byref(count))
         self._check_result(result)
         
-        if count.value > 0:
-            # Store the first device handle
-            self.device_handle = devices_ptr[0]
+        if count.value > 0 and devices_array:
+            # devices_array now points to the SDK's internal array of device handles
+            # Access the first device handle (index 0)
+            self.device_handle = devices_array[0]
         
         return count.value
     
