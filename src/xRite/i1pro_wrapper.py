@@ -176,54 +176,58 @@ def get_default_dll_path() -> str:
             if os.path.exists(dll_path):
                 return dll_path
     
-    # Check in dlls/ directory relative to package root
-    if is_32bit:
-        dll_path = os.path.join(package_root, "dlls", "i1Pro.dll")
+    else :
+        dll_path = os.path.join(package_root, "dlls", "i1Pro64.dll")
         if os.path.exists(dll_path):
             return dll_path
     
-    dll_path = os.path.join(package_root, "dlls", "i1Pro64.dll")
-    if os.path.exists(dll_path):
-        return dll_path
+    # # Check in dlls/ directory relative to package root
+    # if is_32bit:
+    #     dll_path = os.path.join(package_root, "dlls", "i1Pro.dll")
+    #     if os.path.exists(dll_path):
+    #         return dll_path
     
-    # Check for 32-bit DLL in dlls folder
-    dll_path = os.path.join(package_root, "dlls", "i1Pro.dll")
-    if os.path.exists(dll_path):
-        return dll_path
+    # dll_path = os.path.join(package_root, "dlls", "i1Pro64.dll")
+    # if os.path.exists(dll_path):
+    #     return dll_path
     
-    # Check same directory as module
-    if is_32bit:
-        dll_path = os.path.join(module_dir, "i1Pro.dll")
-        if os.path.exists(dll_path):
-            return dll_path
+    # # Check for 32-bit DLL in dlls folder
+    # dll_path = os.path.join(package_root, "dlls", "i1Pro.dll")
+    # if os.path.exists(dll_path):
+    #     return dll_path
     
-    dll_path = os.path.join(module_dir, "i1Pro64.dll")
-    if os.path.exists(dll_path):
-        return dll_path
+    # # Check same directory as module
+    # if is_32bit:
+    #     dll_path = os.path.join(module_dir, "i1Pro.dll")
+    #     if os.path.exists(dll_path):
+    #         return dll_path
     
-    dll_path = os.path.join(module_dir, "i1Pro.dll")
-    if os.path.exists(dll_path):
-        return dll_path
+    # dll_path = os.path.join(module_dir, "i1Pro64.dll")
+    # if os.path.exists(dll_path):
+    #     return dll_path
     
-    # Check current working directory
-    if is_32bit:
-        dll_path = os.path.join(os.getcwd(), "i1Pro.dll")
-        if os.path.exists(dll_path):
-            return dll_path
+    # dll_path = os.path.join(module_dir, "i1Pro.dll")
+    # if os.path.exists(dll_path):
+    #     return dll_path
     
-    dll_path = os.path.join(os.getcwd(), "i1Pro64.dll")
-    if os.path.exists(dll_path):
-        return dll_path
+    # # Check current working directory
+    # if is_32bit:
+    #     dll_path = os.path.join(os.getcwd(), "i1Pro.dll")
+    #     if os.path.exists(dll_path):
+    #         return dll_path
     
-    dll_path = os.path.join(os.getcwd(), "i1Pro.dll")
-    if os.path.exists(dll_path):
-        return dll_path
+    # dll_path = os.path.join(os.getcwd(), "i1Pro64.dll")
+    # if os.path.exists(dll_path):
+    #     return dll_path
     
-    # Return default path based on architecture (will fail if not found)
-    if is_32bit:
-        return r"C:\Program Files (x86)\X-Rite\Devices\i1pro\i1Pro.dll"
-    return os.path.join(package_root, "dlls", "i1Pro64.dll")
-
+    # dll_path = os.path.join(os.getcwd(), "i1Pro.dll")
+    # if os.path.exists(dll_path):
+    #     return dll_path
+    
+    # # Return default path based on architecture (will fail if not found)
+    # if is_32bit:
+    #     return r"C:\Program Files (x86)\X-Rite\Devices\i1pro\i1Pro.dll"
+    # return os.path.join(package_root, "dlls", "i1Pro64.dll")
 
 class I1ProException(Exception):
     """Exception for i1Pro SDK errors"""
