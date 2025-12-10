@@ -7,7 +7,6 @@
 
 ═══════════════════════════════════════════════════════════════════════════════  
 :star2: Purpose — What this document is and how to use it  
-- This is a focused, interpretive report (not a dump of logs).  
 - It organizes and analyzes every example from the test run, highlights root-cause hypotheses, and gives prioritized, actionable fixes & tests.  
 - Use it to: triage wrapper bugs, prioritize development, or produce a PDF summary for stakeholders.  
 ═══════════════════════════════════════════════════════════════════════════════
@@ -21,7 +20,7 @@
 
 ---
 
-## Quick summary (1–2 lines) 🔎
+## Quick summary 🔎
 **The wrapper successfully drives the i1Pro for calibration, emission, reflectance, ambient and scan modes.** Measurement values are physically plausible and repeatable when measurement conditions are stable. Two operational weaknesses need fixing: **device lifecycle handling (Error 20)** and **saturation handling (Error 1)**. Low‑signal negative Y values indicate baseline/noise handling that should be improved.
 
 ---
@@ -53,10 +52,6 @@
 
 ## 2) Interpreted results — deep dive per example 🎯
 
-> Note: I will interpret and explain — not just list values. Each sub-section includes "Why this matters" and "Actionable" suggestions.
-
----
-
 ### Example Simple — key interpretation 🔎
 
 Measured triplet (same-color intent)
@@ -71,7 +66,7 @@ M2 ↔ M3: Δx=+0.0072, Δy=-0.0131  ← **small (acceptable)**
 M1 ↔ M3: Δx=+0.0717, Δy=+0.0879  ← **large**
 ```
 
-Interpretation (why it matters)
+Interpretation :
 - M1 differs strongly from M2/M3 → almost certainly not a minor noise effect. Likely causes:
   - Different target patch / unintended sample measured (human error), OR
   - Severe misalignment or stray light at time of M1.
