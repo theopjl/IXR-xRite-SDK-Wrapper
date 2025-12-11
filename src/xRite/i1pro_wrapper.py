@@ -143,9 +143,52 @@ _OBSERVER_STRINGS = {
 }
 
 
+def _test_dll_for_device(dll_path: str) -> bool:
+    """
+    Test if a DLL can detect a device.
+    
+    Args:
+        dll_path: Path to DLL to test
+        
+    Returns:
+        True if DLL successfully detects at least one device
+    """
+    try:
+        # Load the DLL
+        dll = ctypes.CDLL(dll_path)
+        
+        # Determine function prefix based on DLL name
+        if 'i1Pro3' in os.path.basename(dll_path):
+            prefix = 'I1PRO3_'
+        else:
+            prefix = 'I1_'
+        
+        # Setup GetDevices function
+        get_devices_func = getattr(dll, f'{prefix}GetDevices')
+        get_devices_func.argtypes = [
+            POINTER(POINTER(c_void_p)),
+            POINTER(I1_UInteger)
+        ]
+        get_devices_func.restype = I1_ResultType
+        
+        # Try to get devices
+        devices_array = POINTER(c_void_p)()
+        count = I1_UInteger(0)
+        result = get_devices_func(byref(devices_array), byref(count))
+        
+        # Return True if no error and devices found
+        return result == 0 and count.value > 0
+        
+    except Exception:
+        # If any error occurs, this DLL doesn't work
+        return False
+
+
 def get_default_dll_path() -> str:
     """
     Get the default path to the i1Pro DLL.
+    
+    Auto-detects the correct DLL by testing which one can find devices.
     
     Searches in the following order:
     1. i1Profiler installation directory (preferred for working 32-bit DLL)
@@ -154,7 +197,7 @@ def get_default_dll_path() -> str:
     4. Current working directory
     
     Returns:
-        Path to the DLL file
+        Path to the DLL file that works with connected device
     """
     import struct
     is_32bit = struct.calcsize("P") * 8 == 32
@@ -167,16 +210,26 @@ def get_default_dll_path() -> str:
     
     # For 32-bit Python, prefer the i1Profiler installation (known working DLL)
     if is_32bit:
-        # Check i1Profiler installation paths
+        # Check i1Profiler installation paths - test each to find working one
         i1profiler_paths = [
+            r"C:\Program Files (x86)\X-Rite\Devices\i1pro3\i1Pro3.dll",
             r"C:\Program Files (x86)\X-Rite\Devices\i1pro\i1Pro.dll",
+            r"C:\Program Files\X-Rite\Devices\i1pro3\i1Pro3.dll",
             r"C:\Program Files\X-Rite\Devices\i1pro\i1Pro.dll",
         ]
+        
+        # First pass: test each DLL to see which one detects a device
+        for dll_path in i1profiler_paths:
+            if os.path.exists(dll_path) and _test_dll_for_device(dll_path):
+                return dll_path
+        
+        # Second pass: if no device detected, return first existing DLL
+        # (might be used for other operations even without device)
         for dll_path in i1profiler_paths:
             if os.path.exists(dll_path):
                 return dll_path
     
-    else :
+    else:
         dll_path = os.path.join(package_root, "dlls", "i1Pro64.dll")
         if os.path.exists(dll_path):
             return dll_path
@@ -190,15 +243,15 @@ class I1ProException(Exception):
 
 
 class I1ProSDK:
-    """Low-level wrapper for i1Pro SDK DLL"""
+    """Low-level wrapper for i1Pro SDK DLL - supports i1Pro/i1Pro2 and i1Pro3"""
     
     def __init__(self, dll_path: Optional[str] = None):
         """
         Initialize the SDK wrapper
         
         Args:
-            dll_path: Path to i1Pro64.dll (or i1Pro.dll for 32-bit)
-                     If None, searches in default locations
+            dll_path: Path to i1Pro DLL (or i1Pro3.dll)
+                     If None, searches in default locations and auto-detects device type
         """
         if dll_path is None:
             dll_path = get_default_dll_path()
@@ -207,98 +260,112 @@ class I1ProSDK:
             raise FileNotFoundError(f"i1Pro DLL not found at: {dll_path}")
         
         self.dll = ctypes.CDLL(dll_path)
+        self.dll_path = dll_path
+        
+        # Auto-detect device type based on DLL name
+        if 'i1Pro3' in os.path.basename(dll_path):
+            self.device_type = 'i1pro3'
+            self.prefix = 'I1PRO3_'
+        else:
+            self.device_type = 'i1pro'
+            self.prefix = 'I1_'
+        
         self._setup_functions()
-        print(dll_path)
+        print(f"Loaded {self.device_type.upper()} SDK from: {dll_path}")
     
     def _setup_functions(self):
-        """Setup function signatures for all SDK functions"""
+        """Setup function signatures for all SDK functions using dynamic prefix"""
         
-        # I1_GetDevices
+        # Helper to get function with correct prefix
+        def get_func(name):
+            return getattr(self.dll, f'{self.prefix}{name}')
+        
+        # GetDevices
         # Signature: I1_GetDevices(I1_DeviceHandle **devices, I1_UInteger *count)
         # I1_DeviceHandle is a pointer (struct I1_Device_ *), so we need pointer-to-pointer
         # The SDK fills *devices with a pointer to its internal static array of handles
-        self.dll.I1_GetDevices.argtypes = [
+        get_func('GetDevices').argtypes = [
             POINTER(POINTER(c_void_p)),  # I1_DeviceHandle** - pointer to pointer
             POINTER(I1_UInteger)          # I1_UInteger* - pointer to count
         ]
-        self.dll.I1_GetDevices.restype = I1_ResultType
+        get_func('GetDevices').restype = I1_ResultType
         
-        # I1_OpenDevice
-        self.dll.I1_OpenDevice.argtypes = [I1_DeviceHandle]
-        self.dll.I1_OpenDevice.restype = I1_ResultType
+        # OpenDevice
+        get_func('OpenDevice').argtypes = [I1_DeviceHandle]
+        get_func('OpenDevice').restype = I1_ResultType
         
-        # I1_CloseDevice
-        self.dll.I1_CloseDevice.argtypes = [I1_DeviceHandle]
-        self.dll.I1_CloseDevice.restype = I1_ResultType
+        # CloseDevice
+        get_func('CloseDevice').argtypes = [I1_DeviceHandle]
+        get_func('CloseDevice').restype = I1_ResultType
         
-        # I1_SetGlobalOption
-        self.dll.I1_SetGlobalOption.argtypes = [c_char_p, c_char_p]
-        self.dll.I1_SetGlobalOption.restype = I1_ResultType
+        # SetGlobalOption
+        get_func('SetGlobalOption').argtypes = [c_char_p, c_char_p]
+        get_func('SetGlobalOption').restype = I1_ResultType
         
-        # I1_GetGlobalOption
-        self.dll.I1_GetGlobalOption.argtypes = [c_char_p, c_char_p, POINTER(I1_UInteger)]
-        self.dll.I1_GetGlobalOption.restype = I1_ResultType
+        # GetGlobalOption
+        get_func('GetGlobalOption').argtypes = [c_char_p, c_char_p, POINTER(I1_UInteger)]
+        get_func('GetGlobalOption').restype = I1_ResultType
         
-        # I1_SetOption
-        self.dll.I1_SetOption.argtypes = [I1_DeviceHandle, c_char_p, c_char_p]
-        self.dll.I1_SetOption.restype = I1_ResultType
+        # SetOption
+        get_func('SetOption').argtypes = [I1_DeviceHandle, c_char_p, c_char_p]
+        get_func('SetOption').restype = I1_ResultType
         
-        # I1_GetOption
-        self.dll.I1_GetOption.argtypes = [I1_DeviceHandle, c_char_p, c_char_p, POINTER(I1_UInteger)]
-        self.dll.I1_GetOption.restype = I1_ResultType
+        # GetOption
+        get_func('GetOption').argtypes = [I1_DeviceHandle, c_char_p, c_char_p, POINTER(I1_UInteger)]
+        get_func('GetOption').restype = I1_ResultType
         
-        # I1_GetConnectionStatus
-        self.dll.I1_GetConnectionStatus.argtypes = [I1_DeviceHandle]
-        self.dll.I1_GetConnectionStatus.restype = I1_UInteger
+        # GetConnectionStatus
+        get_func('GetConnectionStatus').argtypes = [I1_DeviceHandle]
+        get_func('GetConnectionStatus').restype = I1_UInteger
         
-        # I1_GetButtonStatusD
-        self.dll.I1_GetButtonStatusD.argtypes = [I1_DeviceHandle]
-        self.dll.I1_GetButtonStatusD.restype = I1_UInteger
+        # GetButtonStatusD
+        get_func('GetButtonStatusD').argtypes = [I1_DeviceHandle]
+        get_func('GetButtonStatusD').restype = I1_UInteger
         
-        # I1_Calibrate
-        self.dll.I1_Calibrate.argtypes = [I1_DeviceHandle]
-        self.dll.I1_Calibrate.restype = I1_ResultType
+        # Calibrate
+        get_func('Calibrate').argtypes = [I1_DeviceHandle]
+        get_func('Calibrate').restype = I1_ResultType
         
-        # I1_TriggerMeasurement
-        self.dll.I1_TriggerMeasurement.argtypes = [I1_DeviceHandle]
-        self.dll.I1_TriggerMeasurement.restype = I1_ResultType
+        # TriggerMeasurement
+        get_func('TriggerMeasurement').argtypes = [I1_DeviceHandle]
+        get_func('TriggerMeasurement').restype = I1_ResultType
         
-        # I1_GetNumberOfAvailableSamples
-        self.dll.I1_GetNumberOfAvailableSamples.argtypes = [I1_DeviceHandle]
-        self.dll.I1_GetNumberOfAvailableSamples.restype = I1_Integer
+        # GetNumberOfAvailableSamples
+        get_func('GetNumberOfAvailableSamples').argtypes = [I1_DeviceHandle]
+        get_func('GetNumberOfAvailableSamples').restype = I1_Integer
         
-        # I1_GetSpectrum
-        self.dll.I1_GetSpectrum.argtypes = [
+        # GetSpectrum
+        get_func('GetSpectrum').argtypes = [
             I1_DeviceHandle,
             POINTER(c_float * SPECTRUM_SIZE),
             I1_Integer
         ]
-        self.dll.I1_GetSpectrum.restype = I1_ResultType
+        get_func('GetSpectrum').restype = I1_ResultType
         
-        # I1_GetTriStimulus
-        self.dll.I1_GetTriStimulus.argtypes = [
+        # GetTriStimulus
+        get_func('GetTriStimulus').argtypes = [
             I1_DeviceHandle,
             POINTER(c_float * TRISTIMULUS_SIZE),
             I1_Integer
         ]
-        self.dll.I1_GetTriStimulus.restype = I1_ResultType
+        get_func('GetTriStimulus').restype = I1_ResultType
         
-        # I1_GetDensities
-        self.dll.I1_GetDensities.argtypes = [
+        # GetDensities
+        get_func('GetDensities').argtypes = [
             I1_DeviceHandle,
             POINTER(c_float * DENSITY_SIZE),
             POINTER(I1_Integer),
             I1_Integer
         ]
-        self.dll.I1_GetDensities.restype = I1_ResultType
+        get_func('GetDensities').restype = I1_ResultType
         
-        # I1_GetDensity
-        self.dll.I1_GetDensity.argtypes = [
+        # GetDensity
+        get_func('GetDensity').argtypes = [
             I1_DeviceHandle,
             POINTER(c_float),
             I1_Integer
         ]
-        self.dll.I1_GetDensity.restype = I1_ResultType
+        get_func('GetDensity').restype = I1_ResultType
 
 
 class I1Pro:
@@ -316,6 +383,10 @@ class I1Pro:
         self.is_open = False
         self.is_calibrated = False
         self.measurement_mode: Optional[MeasurementMode] = None
+    
+    def _get_func(self, name: str):
+        """Helper to get SDK function with correct prefix"""
+        return getattr(self.sdk.dll, f'{self.sdk.prefix}{name}')
         
     def __enter__(self):
         """Context manager entry"""
@@ -335,7 +406,7 @@ class I1Pro:
         """Get last error description"""
         buffer = ctypes.create_string_buffer(256)
         size = I1_UInteger(256)
-        self.sdk.dll.I1_GetGlobalOption(
+        self._get_func('GetGlobalOption')(
             b"LastErrorText",
             buffer,
             byref(size)
@@ -361,7 +432,7 @@ class I1Pro:
         count = I1_UInteger(0)
         
         # Pass address of our pointer variable so SDK can fill it
-        result = self.sdk.dll.I1_GetDevices(byref(devices_array), byref(count))
+        result = self._get_func('GetDevices')(byref(devices_array), byref(count))
         self._check_result(result)
         
         if count.value > 0 and devices_array:
@@ -395,7 +466,7 @@ class I1Pro:
                                f"Device index {device_index} out of range (0-{num_devices-1})")
         
         # Open the device
-        result = self.sdk.dll.I1_OpenDevice(self.device_handle)
+        result = self._get_func('OpenDevice')(self.device_handle)
         self._check_result(result)
         
         self.is_open = True
@@ -405,7 +476,7 @@ class I1Pro:
     def close(self):
         """Close device connection"""
         if self.is_open and self.device_handle:
-            self.sdk.dll.I1_CloseDevice(self.device_handle)
+            self._get_func('CloseDevice')(self.device_handle)
             self.is_open = False
             self.is_calibrated = False
             self.device_handle = None
@@ -422,7 +493,7 @@ class I1Pro:
                                "Device not open")
         
         mode_str = _MEASUREMENT_MODE_STRINGS[mode]
-        result = self.sdk.dll.I1_SetOption(
+        result = self._get_func('SetOption')(
             self.device_handle,
             b"MeasurementMode",
             mode_str
@@ -444,7 +515,7 @@ class I1Pro:
                                "Device not open")
         
         illum_str = _ILLUMINATION_STRINGS[illumination]
-        result = self.sdk.dll.I1_SetOption(
+        result = self._get_func('SetOption')(
             self.device_handle,
             b"Colorimetric.Illumination",
             illum_str
@@ -463,7 +534,7 @@ class I1Pro:
                                "Device not open")
         
         obs_str = _OBSERVER_STRINGS[observer]
-        result = self.sdk.dll.I1_SetOption(
+        result = self._get_func('SetOption')(
             self.device_handle,
             b"Colorimetric.Observer",
             obs_str
@@ -482,7 +553,7 @@ class I1Pro:
             raise I1ProException(I1ResultType.eDeviceNotOpen,
                                "Device not open")
         
-        result = self.sdk.dll.I1_Calibrate(self.device_handle)
+        result = self._get_func('Calibrate')(self.device_handle)
         self._check_result(result)
         
         self.is_calibrated = True
@@ -503,7 +574,7 @@ class I1Pro:
             raise I1ProException(I1ResultType.eDeviceNotCalibrated,
                                "Device not calibrated")
         
-        result = self.sdk.dll.I1_TriggerMeasurement(self.device_handle)
+        result = self._get_func('TriggerMeasurement')(self.device_handle)
         self._check_result(result)
         
         return True
@@ -518,7 +589,7 @@ class I1Pro:
         if not self.is_open:
             return 0
         
-        return self.sdk.dll.I1_GetNumberOfAvailableSamples(self.device_handle)
+        return self._get_func('GetNumberOfAvailableSamples')(self.device_handle)
     
     def get_spectrum(self, index: int = 0) -> np.ndarray:
         """
@@ -537,7 +608,7 @@ class I1Pro:
                                "Device not open")
         
         spectrum = (c_float * SPECTRUM_SIZE)()
-        result = self.sdk.dll.I1_GetSpectrum(
+        result = self._get_func('GetSpectrum')(
             self.device_handle,
             byref(spectrum),
             I1_Integer(index)
@@ -575,7 +646,7 @@ class I1Pro:
                                "Device not open")
         
         # Set color space to CIE xyY
-        result = self.sdk.dll.I1_SetOption(
+        result = self._get_func('SetOption')(
             self.device_handle,
             b"ColorSpaceDescription.Type",
             b"CIExyY"
@@ -583,7 +654,7 @@ class I1Pro:
         self._check_result(result)
         
         tristimulus = (c_float * TRISTIMULUS_SIZE)()
-        result = self.sdk.dll.I1_GetTriStimulus(
+        result = self._get_func('GetTriStimulus')(
             self.device_handle,
             byref(tristimulus),
             I1_Integer(index)
@@ -647,7 +718,7 @@ class I1Pro:
         if not self.is_open:
             return False
         
-        status = self.sdk.dll.I1_GetButtonStatusD(self.device_handle)
+        status = self._get_func('GetButtonStatusD')(self.device_handle)
         return status == I1ButtonStatusType.eButtonIsPressed
     
     def wait_for_button(self):
@@ -682,7 +753,7 @@ class I1Pro:
         
         buffer = ctypes.create_string_buffer(256)
         size = I1_UInteger(256)
-        result = self.sdk.dll.I1_GetOption(
+        result = self._get_func('GetOption')(
             self.device_handle,
             b"SerialNumber",
             buffer,
@@ -701,7 +772,7 @@ class I1Pro:
         """
         buffer = ctypes.create_string_buffer(256)
         size = I1_UInteger(256)
-        result = self.sdk.dll.I1_GetGlobalOption(
+        result = self._get_func('GetGlobalOption')(
             b"SDKVersion",
             buffer,
             byref(size)
